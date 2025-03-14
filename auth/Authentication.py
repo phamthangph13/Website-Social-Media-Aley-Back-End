@@ -74,7 +74,8 @@ def register_routes(api):
                 'background': 'https://cellphones.com.vn/sforum/wp-content/uploads/2024/04/anh-bia-facebook-27.jpg',
                 'isVerified': False,
                 'verifiedTick': False,
-                'created_at': datetime.utcnow()
+                'created_at': datetime.utcnow(),
+                'profile-bio': 'No bio yet.',
             }
             
             # Insert user into database
