@@ -15,6 +15,9 @@ class MongoJSONEncoder(json.JSONEncoder):
             return obj.isoformat()
         if isinstance(obj, ObjectId):
             return str(obj)
+        if isinstance(obj, bytes):
+            import base64
+            return base64.b64encode(obj).decode('utf-8')
         return super(MongoJSONEncoder, self).default(obj)
 
 # Custom output format for Flask-RESTX
