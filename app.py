@@ -48,24 +48,52 @@ def create_app():
         'https://localhost:5000'
     ]
     
+    # For development, check if we should use a more permissive CORS policy
+    dev_mode = os.environ.get("DEV_MODE", "False").lower() == "true"
+    if dev_mode:
+        # In development mode, allow all origins for easier testing
+        cors_origins = "*"
+        supports_credentials = False  # Wildcard origin can't use credentials
+    else:
+        # In production, use the specific allowed origins
+        cors_origins = allowed_origins
+        supports_credentials = True
+    
     # Enable CORS with specific configuration
     CORS(app, resources={r"/*": {
-        "origins": allowed_origins,  # Specific allowed origins instead of wildcard
+        "origins": cors_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-        "supports_credentials": True
+        "supports_credentials": supports_credentials
     }})
     
     # Add explicit handling for OPTIONS requests (preflight)
     @app.after_request
     def after_request(response):
-        origin = request.headers.get('Origin')
-        # Only add CORS headers if not already added by Flask-CORS
-        if origin and origin in allowed_origins and 'Access-Control-Allow-Origin' not in response.headers:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
-            response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
-            response.headers.add('Access-Control-Max-Age', '86400')  # 24 hours
+        # Handle OPTIONS preflight requests
+        if request.method == 'OPTIONS':
+            # Get origin from request
+            origin = request.headers.get('Origin')
+            
+            # In dev mode with wildcard or matching allowed origin
+            if (dev_mode and origin) or (origin and origin in allowed_origins):
+                response.headers['Access-Control-Allow-Origin'] = origin if not dev_mode else '*'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, POST, DELETE, OPTIONS'
+                response.headers['Access-Control-Max-Age'] = '86400'  # 24 hours
+                
+                # Only set Allow-Credentials: true when not using wildcard origin
+                if not dev_mode:
+                    response.headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # For actual requests (non-OPTIONS)
+        elif 'Access-Control-Allow-Origin' not in response.headers:
+            origin = request.headers.get('Origin')
+            if dev_mode:
+                response.headers['Access-Control-Allow-Origin'] = '*'
+            elif origin and origin in allowed_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
         
         # Add security headers for HTTPS
         response.headers.add('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
