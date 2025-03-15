@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request, jsonify, make_response
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
 from pymongo import MongoClient
@@ -43,6 +43,12 @@ def token_required(f):
         return f(current_user_id, *args, **kwargs)
     
     return decorated
+
+# Helper function for OPTIONS requests
+def cors_preflight_response():
+    response = make_response()
+    response.status_code = 200
+    return response
 
 def register_routes(api):
     # Create namespace
@@ -303,6 +309,9 @@ def register_routes(api):
                     }
                 }
             }
+        
+        def options(self):
+            return cors_preflight_response()
     
     # 2. Send Friend Request Endpoint
     @friend_ns.route('/requests')
@@ -430,6 +439,9 @@ def register_routes(api):
                     'created_at': datetime.now()
                 }
             }, 201
+        
+        def options(self):
+            return cors_preflight_response()
     
     # 3. Cancel Friend Request Endpoint
     @friend_ns.route('/requests/<string:request_id>')
@@ -479,6 +491,9 @@ def register_routes(api):
                     'message': 'Đã huỷ lời mời kết bạn'
                 }
             }, 200
+        
+        def options(self, request_id):
+            return cors_preflight_response()
     
     # 4. Unfriend User Endpoint
     @friend_ns.route('/<string:friend_id>')
@@ -519,6 +534,9 @@ def register_routes(api):
                     'message': 'Đã huỷ kết bạn thành công'
                 }
             }, 200
+        
+        def options(self, friend_id):
+            return cors_preflight_response()
     
     # 5. Accept Friend Request Endpoint
     @friend_ns.route('/requests/<string:request_id>/accept')
@@ -585,6 +603,9 @@ def register_routes(api):
                     'created_at': datetime.now()
                 }
             }, 200
+        
+        def options(self, request_id):
+            return cors_preflight_response()
     
     # 6. Get Received Friend Requests Endpoint
     @friend_ns.route('/requests/received')
@@ -637,6 +658,9 @@ def register_routes(api):
                     }
                 }
             }
+        
+        def options(self):
+            return cors_preflight_response()
     
     # 7. Get Sent Friend Requests Endpoint
     @friend_ns.route('/requests/sent')
@@ -685,6 +709,9 @@ def register_routes(api):
                     }
                 }
             }
+        
+        def options(self):
+            return cors_preflight_response()
     
     # 8. Check Friend Status Endpoint
     @friend_ns.route('/status/<string:user_id>')
@@ -775,6 +802,9 @@ def register_routes(api):
                     'user_id': user_id
                 }
             }
+        
+        def options(self, user_id):
+            return cors_preflight_response()
     
     # Add namespace to API
     api.add_namespace(friend_ns) 

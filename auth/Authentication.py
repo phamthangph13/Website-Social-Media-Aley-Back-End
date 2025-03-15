@@ -39,6 +39,13 @@ def register_routes(api):
         'password': fields.String(required=True, description='New password')
     })
 
+    # Helper function for OPTIONS requests
+    def cors_preflight_response():
+        response = make_response()
+        # We'll let the decorator in app.py handle the specific origin
+        response.status_code = 200
+        return response
+
     @auth_ns.route('/register')
     class Register(Resource):
         @auth_ns.expect(user_model)
@@ -93,6 +100,9 @@ def register_routes(api):
             
             return {'message': 'Registration successful. Please check your email to verify your account.'}, 201
 
+        def options(self):
+            return cors_preflight_response()
+
     @auth_ns.route('/login')
     class Login(Resource):
         @auth_ns.expect(login_model)
@@ -120,6 +130,9 @@ def register_routes(api):
             )
             
             return {'token': token}, 200
+
+        def options(self):
+            return cors_preflight_response()
 
     @auth_ns.route('/verify/<token>')
     class VerifyEmail(Resource):
@@ -150,6 +163,9 @@ def register_routes(api):
                 error_message = f'Đã xảy ra lỗi: {str(e)}'
                 return {'message': error_message}, 500
 
+        def options(self, token):
+            return cors_preflight_response()
+
     @auth_ns.route('/verify-result/<status>')
     class VerifyResult(Resource):
         def get(self, status):
@@ -160,6 +176,9 @@ def register_routes(api):
                 return make_response(render_template('verify_error.html', error_message=error_message), 400)
             else:
                 return make_response(render_template('verify_error.html', error_message='Trạng thái xác thực không hợp lệ'), 400)
+
+        def options(self, status):
+            return cors_preflight_response()
 
     @auth_ns.route('/forgot-password')
     class ForgotPassword(Resource):
@@ -187,6 +206,9 @@ def register_routes(api):
             send_password_reset_email(data['email'], token, user['fullName'])
             
             return {'message': 'Password reset instructions sent to your email'}, 200
+
+        def options(self):
+            return cors_preflight_response()
 
     @auth_ns.route('/reset-password/<token>')
     class ResetPassword(Resource):
@@ -252,7 +274,10 @@ def register_routes(api):
                 return {'message': 'Liên kết đặt lại mật khẩu không hợp lệ'}, 400
             except Exception as e:
                 return {'message': f'Đã xảy ra lỗi: {str(e)}'}, 500
-                
+
+        def options(self, token):
+            return cors_preflight_response()
+
     @auth_ns.route('/reset-result/<status>')
     class ResetResult(Resource):
         def get(self, status):
@@ -263,6 +288,9 @@ def register_routes(api):
                 return make_response(render_template('reset_error.html', error_message=error_message), 400)
             else:
                 return make_response(render_template('reset_error.html', error_message='Trạng thái không hợp lệ'), 400)
+
+        def options(self, status):
+            return cors_preflight_response()
 
     # Add namespace to API
     api.add_namespace(auth_ns) 

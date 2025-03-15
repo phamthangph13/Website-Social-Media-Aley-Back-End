@@ -1,4 +1,4 @@
-from flask import request, jsonify, Response
+from flask import request, jsonify, Response, make_response
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
 from pymongo import MongoClient, DESCENDING
@@ -98,6 +98,12 @@ def add_media_urls_to_post(post, base_url=None):
             media_item['url'] = f"{base_url}/api/media/{media_id}"
     
     return post
+
+# Helper function for OPTIONS requests
+def cors_preflight_response():
+    response = make_response()
+    response.status_code = 200
+    return response
 
 def register_routes(api):
     # Create namespace
@@ -294,6 +300,9 @@ def register_routes(api):
                     'message': 'Đã xảy ra lỗi khi đăng bài viết',
                     'error_code': 'SERVER_ERROR'
                 }, 500
+            
+        def options(self):
+            return cors_preflight_response()
     
     # Get all posts (with pagination)
     @post_ns.route('/list')
@@ -348,6 +357,9 @@ def register_routes(api):
             
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+            
+        def options(self):
+            return cors_preflight_response()
     
     # Get a specific post
     @post_ns.route('/<post_id>')
@@ -381,6 +393,9 @@ def register_routes(api):
                 return {'success': True, 'data': post}
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+            
+        def options(self, post_id):
+            return cors_preflight_response()
     
     # Update a post
     @post_ns.route('/<post_id>')
@@ -425,6 +440,9 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+            
+        def options(self, post_id):
+            return cors_preflight_response()
     
     # Delete a post
     @post_ns.route('/<post_id>')
@@ -455,6 +473,9 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+            
+        def options(self, post_id):
+            return cors_preflight_response()
     
     # Like/unlike a post
     @post_ns.route('/<post_id>/like')
@@ -504,6 +525,9 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+            
+        def options(self, post_id):
+            return cors_preflight_response()
     
     # Get user's news feed (posts from all users - public posts)
     @post_ns.route('/feed')
@@ -564,6 +588,9 @@ def register_routes(api):
                     'pages': (total + limit - 1) // limit
                 }
             }
+            
+        def options(self):
+            return cors_preflight_response()
     
     # Get posts from a specific user
     @post_ns.route('/user/<user_id>')
@@ -634,6 +661,9 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+            
+        def options(self, user_id):
+            return cors_preflight_response()
     
     # Add namespace to API
     api.add_namespace(post_ns)
@@ -677,6 +707,9 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'success': False, 'message': f'Error retrieving file: {str(e)}'}, 500
+            
+        def options(self, media_id):
+            return cors_preflight_response()
     
     # Add media namespace to API
     api.add_namespace(media_ns) 

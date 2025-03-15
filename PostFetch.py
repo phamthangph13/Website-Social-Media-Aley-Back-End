@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request, jsonify, make_response
 from flask_restx import Namespace, Resource, fields
 from flask_cors import CORS, cross_origin
 from bson import ObjectId
@@ -56,6 +56,12 @@ def token_required(f):
         return f(current_user_id, *args, **kwargs)
     
     return decorated
+
+# Helper function for OPTIONS requests
+def cors_preflight_response():
+    response = make_response()
+    response.status_code = 200
+    return response
 
 def register_routes(api):
     # Tạo namespace
@@ -122,6 +128,10 @@ def register_routes(api):
                         'details': str(e)
                     }
                 }, 500
+        
+        @cross_origin()
+        def options(self, media_id):
+            return cors_preflight_response()
     
     # Models
     post_model = api.model('Post', {
@@ -547,6 +557,10 @@ def register_routes(api):
                         'details': str(e)
                     }
                 }, 500
+        
+        @cross_origin()
+        def options(self, post_id):
+            return cors_preflight_response()
     
     # Thêm namespace vào API
     api.add_namespace(post_ns)
