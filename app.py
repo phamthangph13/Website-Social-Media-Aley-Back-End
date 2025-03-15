@@ -62,6 +62,10 @@ def create_app():
     from UserFetch import register_routes as register_user_routes
     register_user_routes(api)
     
+    # Import post routes
+    from Post import register_routes as register_post_routes
+    register_post_routes(api)
+    
     # Add additional imports
     from flask import make_response, redirect, url_for
     

@@ -53,14 +53,16 @@ def register_routes(api):
         'dateOfBirth': fields.String(description='User date of birth'),
         'avatar': fields.String(description='User avatar URL'),
         'background': fields.String(description='User background image URL'),
-        'verifiedTick': fields.Boolean(description='Verified status')
+        'verifiedTick': fields.Boolean(description='Verified status'),
+        'profile-bio': fields.String(description='User bio')
     })
     
     user_update_model = api.model('UserUpdate', {
         'fullName': fields.String(description='User full name', required=False),
         'dateOfBirth': fields.String(description='User date of birth', required=False),
         'avatar': fields.String(description='User avatar URL', required=False),
-        'background': fields.String(description='User background image URL', required=False)
+        'background': fields.String(description='User background image URL', required=False),
+        'profile-bio': fields.String(description='User bio', required=False)
     })
     
     # Lấy thông tin người dùng hiện tại
