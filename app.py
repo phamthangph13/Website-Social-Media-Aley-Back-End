@@ -135,6 +135,116 @@ def create_app():
         resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
         return resp
     
+    # Add compatibility route for auth/login
+    @app.route('/auth/login', methods=['POST'])
+    def redirect_auth_login():
+        # Forward the request to the correct endpoint
+        # Get all query parameters
+        args = request.args.to_dict(flat=False)
+        query_string = '&'.join([f"{k}={v[0]}" for k, v in args.items()])
+        
+        # Redirect to the correct endpoint
+        target_url = f"/api/auth/login"
+        if query_string:
+            target_url += f"?{query_string}"
+        
+        # Create response with redirect status
+        response = jsonify({"redirected": True})
+        response.status_code = 307  # Temporary redirect, preserves method
+        response.headers['Location'] = target_url
+        return response
+    
+    # Handle OPTIONS for the auth/login compatibility route
+    @app.route('/auth/login', methods=['OPTIONS'])
+    def options_auth_login():
+        resp = app.make_default_options_response()
+        origin = request.headers.get('Origin')
+        if origin and origin in allowed_origins:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            resp.headers['Access-Control-Allow-Origin'] = allowed_origins[0]  # Default to the first allowed origin
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+        return resp
+    
+    # Add compatibility route for auth/register
+    @app.route('/auth/register', methods=['POST'])
+    def redirect_auth_register():
+        args = request.args.to_dict(flat=False)
+        query_string = '&'.join([f"{k}={v[0]}" for k, v in args.items()])
+        
+        target_url = f"/api/auth/register"
+        if query_string:
+            target_url += f"?{query_string}"
+        
+        response = jsonify({"redirected": True})
+        response.status_code = 307  # Temporary redirect, preserves method
+        response.headers['Location'] = target_url
+        return response
+    
+    # Handle OPTIONS for auth/register
+    @app.route('/auth/register', methods=['OPTIONS'])
+    def options_auth_register():
+        resp = app.make_default_options_response()
+        origin = request.headers.get('Origin')
+        if origin and origin in allowed_origins:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            resp.headers['Access-Control-Allow-Origin'] = allowed_origins[0]
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+        return resp
+    
+    # Add compatibility route for auth/forgot-password
+    @app.route('/auth/forgot-password', methods=['POST'])
+    def redirect_auth_forgot_password():
+        args = request.args.to_dict(flat=False)
+        query_string = '&'.join([f"{k}={v[0]}" for k, v in args.items()])
+        
+        target_url = f"/api/auth/forgot-password"
+        if query_string:
+            target_url += f"?{query_string}"
+        
+        response = jsonify({"redirected": True})
+        response.status_code = 307
+        response.headers['Location'] = target_url
+        return response
+    
+    # Handle OPTIONS for auth/forgot-password
+    @app.route('/auth/forgot-password', methods=['OPTIONS'])
+    def options_auth_forgot_password():
+        resp = app.make_default_options_response()
+        origin = request.headers.get('Origin')
+        if origin and origin in allowed_origins:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            resp.headers['Access-Control-Allow-Origin'] = allowed_origins[0]
+        resp.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+        return resp
+    
+    # Add compatibility route for auth/verify
+    @app.route('/auth/verify/<token>', methods=['GET'])
+    def redirect_auth_verify(token):
+        target_url = f"/api/auth/verify/{token}"
+        response = jsonify({"redirected": True})
+        response.status_code = 307
+        response.headers['Location'] = target_url
+        return response
+    
+    # Handle OPTIONS for auth/verify
+    @app.route('/auth/verify/<token>', methods=['OPTIONS'])
+    def options_auth_verify(token):
+        resp = app.make_default_options_response()
+        origin = request.headers.get('Origin')
+        if origin and origin in allowed_origins:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            resp.headers['Access-Control-Allow-Origin'] = allowed_origins[0]
+        resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+        return resp
+    
     # Route cho trang xác thực email trung gian
     @app.route('/verify')
     def verify_page():
