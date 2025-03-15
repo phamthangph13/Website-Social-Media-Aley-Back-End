@@ -111,9 +111,6 @@ def register_routes(api):
                 user.pop('profileBio', None)
             
             return user
-        
-        def options(self):
-            return cors_preflight_response()
     
     # Lấy thông tin người dùng theo ID
     @user_ns.route('/<user_id>')
@@ -137,9 +134,6 @@ def register_routes(api):
                 return user
             except Exception as e:
                 user_ns.abort(400, f'Invalid user ID: {str(e)}')
-            
-        def options(self, user_id):
-            return cors_preflight_response()
     
     # Cập nhật thông tin người dùng
     @user_ns.route('/update')
@@ -288,9 +282,6 @@ def register_routes(api):
                         'details': str(e)
                     }
                 }, 500
-            
-        def options(self):
-            return cors_preflight_response()
     
     # Endpoint để lấy ảnh từ database
     @user_ns.route('/image/<image_id>')
@@ -319,9 +310,6 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'error': str(e)}, 500
-            
-        def options(self, image_id):
-            return cors_preflight_response()
     
     # Lấy danh sách người dùng (phân trang)
     @user_ns.route('/list')
@@ -345,9 +333,6 @@ def register_routes(api):
                 'limit': limit,
                 'pages': (total + limit - 1) // limit
             }
-            
-        def options(self):
-            return cors_preflight_response()
     
     # Tìm kiếm người dùng
     @user_ns.route('/search')
@@ -380,9 +365,6 @@ def register_routes(api):
                 'limit': limit,
                 'pages': (total + limit - 1) // limit
             }
-            
-        def options(self):
-            return cors_preflight_response()
     
     # Thêm namespace vào API
     api.add_namespace(user_ns) 
@@ -452,10 +434,4 @@ def process_base64_image(base64_data, image_type, user_id):
     except Exception as e:
         # Các lỗi khác
         print(f"Error processing image: {str(e)}")
-        return None
-
-# Helper function for OPTIONS requests
-def cors_preflight_response():
-    response = make_response()
-    response.status_code = 200
-    return response 
+        return None 
