@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response
 from flask_mail import Mail
 from flask_restx import Api
 from flask_cors import CORS
@@ -45,7 +45,11 @@ def create_app():
         'http://localhost:3000',
         'https://localhost:3000',
         'http://localhost:5000',
-        'https://localhost:5000'
+        'https://localhost:5000',
+        # Thêm domain của bạn khi triển khai
+        'https://website-social-media-aley-back-end.onrender.com',
+        # Có thể thêm các subdomain nếu cần
+        'https://*.website-social-media-aley-back-end.onrender.com'
     ]
     
     # For development, check if we should use a more permissive CORS policy
@@ -299,9 +303,35 @@ def create_app():
         return render_template('reset_password.html', token=token)
     
     # Add route for login page (just as a placeholder)
-    @app.route('/login')
+    @app.route('/login', methods=['GET', 'POST', 'OPTIONS'])
     def login_page():
-        return redirect('/')
+        if request.method == 'GET':
+            return redirect('/')
+        elif request.method == 'POST':
+            # Forward the request to the correct endpoint
+            args = request.args.to_dict(flat=False)
+            query_string = '&'.join([f"{k}={v[0]}" for k, v in args.items()])
+            
+            # Redirect to the correct endpoint
+            target_url = f"/api/auth/login"
+            if query_string:
+                target_url += f"?{query_string}"
+            
+            # Create response with redirect status
+            response = jsonify({"redirected": True})
+            response.status_code = 307  # Temporary redirect, preserves method
+            response.headers['Location'] = target_url
+            return response
+        else:  # OPTIONS
+            resp = make_response()
+            origin = request.headers.get('Origin')
+            if origin and origin in allowed_origins:
+                resp.headers['Access-Control-Allow-Origin'] = origin
+            else:
+                resp.headers['Access-Control-Allow-Origin'] = allowed_origins[0]
+            resp.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+            return resp
     
     # Add route for contact page (just as a placeholder)
     @app.route('/contact')
@@ -318,10 +348,13 @@ if __name__ == '__main__':
     # Check if SSL context should be used
     use_ssl = os.environ.get("USE_SSL", "False").lower() == "true"
     
-    if use_ssl:
+    # Check if app is running in production mode
+    is_production = os.environ.get("PRODUCTION", "False").lower() == "true"
+    
+    if use_ssl and not is_production:
         # For development with self-signed certificates
         ssl_context = ('cert.pem', 'key.pem')
-        app.run(host='0.0.0.0', port=port, debug=True, ssl_context=ssl_context)
+        app.run(host='0.0.0.0', port=port, debug=not is_production, ssl_context=ssl_context)
     else:
         # Regular run - Render will handle SSL/HTTPS in production
-        app.run(host='0.0.0.0', port=port, debug=True) 
+        app.run(host='0.0.0.0', port=port, debug=not is_production) 
