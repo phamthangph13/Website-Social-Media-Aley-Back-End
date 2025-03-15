@@ -39,19 +39,28 @@ def create_app():
     app = Flask(__name__, template_folder='templates')
     app.config.from_object(Config)
     
+    # Define allowed origins
+    allowed_origins = [
+        'https://phamthangph13.github.io',
+        'http://localhost:3000',
+        'http://localhost:5000'
+    ]
+    
     # Enable CORS with specific configuration
     CORS(app, resources={r"/*": {
-        "origins": "*",  # Allow all origins
+        "origins": allowed_origins,  # Specific allowed origins instead of wildcard
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
         "supports_credentials": True
     }})
     
     # Add explicit handling for OPTIONS requests (preflight)
     @app.after_request
     def after_request(response):
-        if request.method == 'OPTIONS':
-            response.headers.add('Access-Control-Allow-Origin', '*')
+        origin = request.headers.get('Origin')
+        # Only add CORS headers if not already added by Flask-CORS
+        if origin and origin in allowed_origins and 'Access-Control-Allow-Origin' not in response.headers:
+            response.headers.add('Access-Control-Allow-Origin', origin)
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
             response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
             response.headers.add('Access-Control-Max-Age', '86400')  # 24 hours
@@ -117,7 +126,11 @@ def create_app():
     @app.route('/api/feed/combined', methods=['OPTIONS'])
     def options_feed_combined():
         resp = app.make_default_options_response()
-        resp.headers['Access-Control-Allow-Origin'] = '*'
+        origin = request.headers.get('Origin')
+        if origin and origin in allowed_origins:
+            resp.headers['Access-Control-Allow-Origin'] = origin
+        else:
+            resp.headers['Access-Control-Allow-Origin'] = allowed_origins[0]  # Default to the first allowed origin
         resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
         resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
         return resp
