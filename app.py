@@ -43,7 +43,9 @@ def create_app():
     allowed_origins = [
         'https://phamthangph13.github.io',
         'http://localhost:3000',
-        'http://localhost:5000'
+        'https://localhost:3000',
+        'http://localhost:5000',
+        'https://localhost:5000'
     ]
     
     # Enable CORS with specific configuration
@@ -64,6 +66,13 @@ def create_app():
             response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
             response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
             response.headers.add('Access-Control-Max-Age', '86400')  # 24 hours
+        
+        # Add security headers for HTTPS
+        response.headers.add('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        response.headers.add('X-Content-Type-Options', 'nosniff')
+        response.headers.add('X-Frame-Options', 'SAMEORIGIN')
+        response.headers.add('X-XSS-Protection', '1; mode=block')
+        
         return response
     
     # Initialize Flask-Mail
@@ -277,4 +286,14 @@ if __name__ == '__main__':
     app = create_app()
     # Get port from environment variable for Render compatibility
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True) 
+    
+    # Check if SSL context should be used
+    use_ssl = os.environ.get("USE_SSL", "False").lower() == "true"
+    
+    if use_ssl:
+        # For development with self-signed certificates
+        ssl_context = ('cert.pem', 'key.pem')
+        app.run(host='0.0.0.0', port=port, debug=True, ssl_context=ssl_context)
+    else:
+        # Regular run - Render will handle SSL/HTTPS in production
+        app.run(host='0.0.0.0', port=port, debug=True) 
