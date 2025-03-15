@@ -3,7 +3,7 @@ from datetime import timedelta
 
 class Config:
     # MongoDB Configuration
-    MONGO_URI = "mongodb://localhost:27017/Aley"
+    MONGO_URI = "mongodb+srv://winnieph13:4lICeRJJUAiDTpBL@aleyserver.onwo6.mongodb.net/Aley?retryWrites=true&w=majority&appName=AleyServer"
     
     # JWT Configuration
     SECRET_KEY = "9fc47fa2b895110bdd6c0368414b8e01ef179dfa80f5a9192c692656764b6c20"  # Randomly generated secret key
