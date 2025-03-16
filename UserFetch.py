@@ -1,4 +1,4 @@
-from flask import request, jsonify, make_response
+from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
 from pymongo import MongoClient

@@ -1,4 +1,4 @@
-from flask import request, jsonify, Response, make_response
+from flask import request, jsonify, Response
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
 from pymongo import MongoClient, DESCENDING
@@ -294,7 +294,7 @@ def register_routes(api):
                     'message': 'Đã xảy ra lỗi khi đăng bài viết',
                     'error_code': 'SERVER_ERROR'
                 }, 500
-            
+    
     # Get all posts (with pagination)
     @post_ns.route('/list')
     class PostList(Resource):

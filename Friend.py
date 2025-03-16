@@ -1,4 +1,4 @@
-from flask import request, jsonify, make_response
+from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
 from pymongo import MongoClient
@@ -528,7 +528,7 @@ def register_routes(api):
         @friend_ns.response(403, 'Forbidden', error_response)
         @friend_ns.response(404, 'Not Found', error_response)
         @token_required
-        def patch(current_user_id, self, request_id):
+        def post(current_user_id, self, request_id):
             # Check if request exists
             if not ObjectId.is_valid(request_id):
                 return {

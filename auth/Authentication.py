@@ -43,220 +43,226 @@ def register_routes(api):
     class Register(Resource):
         @auth_ns.expect(user_model)
         def post(self):
-            data = request.json
+            data = request.get_json()
             
-            # Validate request data
-            if not data:
-                return {'message': 'No input data provided'}, 400
-            
-            # Check if user already exists
+            # Check if email already exists
             if users.find_one({'email': data['email']}):
-                return {'message': 'User already exists'}, 409
+                return {'message': 'Email already registered'}, 400
             
+            # Check if user is at least 18 years old
             try:
-                # Generate a secure salt with bcrypt
-                salt = bcrypt.gensalt()
+                date_of_birth = datetime.strptime(data['dateOfBirth'], '%Y-%m-%d')
+                today = datetime.utcnow()
+                age = today.year - date_of_birth.year - ((today.month, today.day) < (date_of_birth.month, date_of_birth.day))
                 
-                # Hash the password with the salt
-                hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), salt)
+                if age < 18:
+                    return {'message': 'Bạn chưa đủ 18 tuổi để đăng ký tài khoản'}, 400
+            except ValueError:
+                return {'message': 'Định dạng ngày sinh không hợp lệ'}, 400
                 
-                # Convert to string for storage
-                password_hash = hashed_password.decode('utf-8')
-                
-                # Prepare user data
-                new_user = {
-                    'fullName': data['fullName'],
-                    'dateOfBirth': datetime.strptime(data['dateOfBirth'], '%Y-%m-%d'),
-                    'email': data['email'],
-                    'password': password_hash,
-                    'verified': False,
-                    'createdAt': datetime.utcnow(),
-                    'roles': ['user']  # Default role for new users
-                }
-                
-                # Insert user into the database
-                result = users.insert_one(new_user)
-                
-                # Generate verification token
-                token = jwt.encode({
-                    'user_id': str(result.inserted_id),
-                    'exp': datetime.utcnow() + timedelta(hours=24)
-                }, Config.SECRET_KEY, algorithm='HS256')
-                
-                # Send verification email
-                send_verification_email(data['email'], token, data['fullName'])
-                
-                return {'message': 'User created successfully. Please verify your email.'}, 201
+            # Hash password
+            salt = bcrypt.gensalt()
+            hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), salt)
             
-            except Exception as e:
-                return {'message': str(e)}, 500
+            # Create user document
+            user = {
+                'fullName': data['fullName'],
+                'dateOfBirth': data['dateOfBirth'],
+                'email': data['email'],
+                'password': hashed_password,
+                'avatar': 'https://server-avatar.nimostatic.tv/1629531402370/202402111707658017652_1629531402370_avatar.png',
+                'background': 'https://cellphones.com.vn/sforum/wp-content/uploads/2024/04/anh-bia-facebook-27.jpg',
+                'isVerified': False,
+                'verifiedTick': False,
+                'created_at': datetime.utcnow(),
+                'profile-bio': 'No bio yet.',
+            }
+            
+            # Insert user into database
+            result = users.insert_one(user)
+            
+            # Generate verification token
+            token = jwt.encode(
+                {'user_id': str(result.inserted_id), 'exp': datetime.utcnow() + timedelta(hours=24)},
+                Config.JWT_SECRET_KEY,
+                algorithm='HS256'
+            )
+            
+            # Send verification email
+            send_verification_email(data['email'], token, data['fullName'])
+            
+            return {'message': 'Registration successful. Please check your email to verify your account.'}, 201
 
     @auth_ns.route('/login')
     class Login(Resource):
         @auth_ns.expect(login_model)
         def post(self):
-            data = request.json
+            data = request.get_json()
             
-            if not data:
-                return {'message': 'No input data provided'}, 400
-            
+            # Find user
             user = users.find_one({'email': data['email']})
-            
             if not user:
                 return {'message': 'Invalid email or password'}, 401
-            
-            # Check if the user has verified their email
-            if not user.get('verified', False):
-                return {'message': 'Please verify your email before logging in'}, 401
-            
-            # Check password using bcrypt
-            if bcrypt.checkpw(data['password'].encode('utf-8'), user['password'].encode('utf-8')):
-                # Generate token for client
-                token = jwt.encode({
-                    'user_id': str(user['_id']),
-                    'exp': datetime.utcnow() + timedelta(days=7)
-                }, Config.SECRET_KEY, algorithm='HS256')
                 
-                return {
-                    'token': token,
-                    'user': {
-                        'id': str(user['_id']),
-                        'fullName': user['fullName'],
-                        'email': user['email'],
-                        'roles': user.get('roles', ['user'])
-                    }
-                }, 200
+            # Check password
+            if not bcrypt.checkpw(data['password'].encode('utf-8'), user['password']):
+                return {'message': 'Invalid email or password'}, 401
+                
+            # Check if email is verified
+            if not user['isVerified']:
+                return {'message': 'Please verify your email first'}, 401
+                
+            # Generate JWT token
+            token = jwt.encode(
+                {'user_id': str(user['_id']), 'exp': datetime.utcnow() + timedelta(hours=1)},
+                Config.JWT_SECRET_KEY,
+                algorithm='HS256'
+            )
             
-            return {'message': 'Invalid email or password'}, 401
+            return {'token': token}, 200
 
     @auth_ns.route('/verify/<token>')
     class VerifyEmail(Resource):
         def get(self, token):
             try:
-                # Decode token
-                data = jwt.decode(token, Config.SECRET_KEY, algorithms=['HS256'])
-                user_id = data['user_id']
+                # Decode the token
+                payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=['HS256'])
+                user_id = payload['user_id']
                 
-                # Find user by ID
-                user = users.find_one({'_id': ObjectId(user_id)})
+                # Update user verification status
+                users.update_one(
+                    {'_id': ObjectId(user_id)},
+                    {'$set': {'isVerified': True}}
+                )
                 
-                if not user:
-                    return redirect(url_for('verify_result', status='failed'))
+                # Luôn trả về JSON để JavaScript có thể xử lý
+                return {'message': 'Email verified successfully'}, 200
+                    
+            except jwt.ExpiredSignatureError:
+                error_message = 'Liên kết xác thực đã hết hạn. Link xác minh danh tính tài khoản chỉ có hiệu lực trong 24 giờ.'
+                return {'message': error_message}, 400
                 
-                # If user is already verified
-                if user.get('verified', False):
-                    return redirect(url_for('verify_result', status='already-verified'))
+            except jwt.InvalidTokenError:
+                error_message = 'Liên kết xác thực không hợp lệ'
+                return {'message': error_message}, 400
                 
-                # Update user's verified status
-                users.update_one({'_id': ObjectId(user_id)}, {'$set': {'verified': True}})
-                
-                return redirect(url_for('verify_result', status='success'))
-            
             except Exception as e:
-                return redirect(url_for('verify_result', status='failed'))
+                error_message = f'Đã xảy ra lỗi: {str(e)}'
+                return {'message': error_message}, 500
 
     @auth_ns.route('/verify-result/<status>')
     class VerifyResult(Resource):
         def get(self, status):
             if status == 'success':
-                return {'message': 'Email verified successfully'}, 200
-            elif status == 'already-verified':
-                return {'message': 'Email already verified'}, 200
+                return make_response(render_template('verify_success.html'), 200)
+            elif status == 'error':
+                error_message = request.args.get('error', 'Đã xảy ra lỗi không xác định')
+                return make_response(render_template('verify_error.html', error_message=error_message), 400)
             else:
-                return {'message': 'Email verification failed'}, 400
+                return make_response(render_template('verify_error.html', error_message='Trạng thái xác thực không hợp lệ'), 400)
 
     @auth_ns.route('/forgot-password')
     class ForgotPassword(Resource):
         @auth_ns.expect(reset_password_model)
         def post(self):
-            data = request.json
-            
-            if not data or not data.get('email'):
-                return {'message': 'Email is required'}, 400
-            
-            # Find user by email
+            data = request.get_json()
             user = users.find_one({'email': data['email']})
             
             if not user:
-                # Don't reveal that the user does not exist
-                return {'message': 'If your email is registered, you will receive a password reset link'}, 200
+                return {'message': 'Email not found'}, 404
+                
+            # Generate reset token with current timestamp
+            current_time = datetime.utcnow()
+            token = jwt.encode(
+                {
+                    'user_id': str(user['_id']), 
+                    'exp': current_time + timedelta(hours=24),
+                    'iat': current_time  # Thêm thời gian phát hành token
+                },
+                Config.JWT_SECRET_KEY,
+                algorithm='HS256'
+            )
             
-            # Generate password reset token
-            token = jwt.encode({
-                'user_id': str(user['_id']),
-                'exp': datetime.utcnow() + timedelta(hours=1)
-            }, Config.SECRET_KEY, algorithm='HS256')
+            # Send reset password email
+            send_password_reset_email(data['email'], token, user['fullName'])
             
-            # Send password reset email
-            send_password_reset_email(user['email'], token, user['fullName'])
-            
-            return {'message': 'If your email is registered, you will receive a password reset link'}, 200
+            return {'message': 'Password reset instructions sent to your email'}, 200
 
     @auth_ns.route('/reset-password/<token>')
     class ResetPassword(Resource):
         def get(self, token):
+            """Xử lý truy cập trực tiếp vào link reset mật khẩu từ email."""
             try:
-                # Validate token without changing the password yet
-                data = jwt.decode(token, Config.SECRET_KEY, algorithms=['HS256'])
-                user_id = data['user_id']
+                # Kiểm tra token có hợp lệ không
+                payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=['HS256'])
+                user_id = payload['user_id']
                 
-                # Check if user exists
+                # Kiểm tra xem token đã được sử dụng chưa bằng cách 
+                # kiểm tra trong DB có flag passwordUsedTokens chứa token này không
                 user = users.find_one({'_id': ObjectId(user_id)})
-                
-                if not user:
-                    return redirect(url_for('reset_result', status='invalid'))
-                
-                # Token is valid, but we just render the form without changing password
-                # The actual password change happens in POST
-                return redirect(f'/reset-password?token={token}')
-            
+                if user and 'passwordUsedTokens' in user and token in user['passwordUsedTokens']:
+                    error_message = 'Liên kết đặt lại mật khẩu này đã được sử dụng. Vui lòng yêu cầu link mới.'
+                    return make_response(render_template('reset_error.html', error_message=error_message), 400)
+                    
+                # Chuyển hướng đến trang reset mật khẩu
+                return redirect(f"/reset-password?token={token}")
             except jwt.ExpiredSignatureError:
-                return redirect(url_for('reset_result', status='expired'))
-            except Exception:
-                return redirect(url_for('reset_result', status='invalid'))
-        
+                error_message = 'Liên kết đặt lại mật khẩu đã hết hạn. Link đặt lại mật khẩu chỉ có hiệu lực trong 24 giờ.'
+                return make_response(render_template('reset_error.html', error_message=error_message), 400)
+            except jwt.InvalidTokenError:
+                error_message = 'Liên kết đặt lại mật khẩu không hợp lệ'
+                return make_response(render_template('reset_error.html', error_message=error_message), 400)
+            except Exception as e:
+                error_message = f'Đã xảy ra lỗi: {str(e)}'
+                return make_response(render_template('reset_error.html', error_message=error_message), 500)
+                
         @auth_ns.expect(new_password_model)
         def post(self, token):
             try:
-                # Validate token
-                data = jwt.decode(token, Config.SECRET_KEY, algorithms=['HS256'])
-                user_id = data['user_id']
+                # Giải mã token
+                payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=['HS256'])
+                user_id = payload['user_id']
                 
-                # Check request data
-                request_data = request.json
-                if not request_data or not request_data.get('password'):
-                    return {'message': 'Password is required'}, 400
+                # Kiểm tra xem token đã được sử dụng chưa bằng cách
+                # kiểm tra trong DB có flag passwordUsedTokens chứa token này không
+                user = users.find_one({'_id': ObjectId(user_id)})
+                if user and 'passwordUsedTokens' in user and token in user['passwordUsedTokens']:
+                    return {'message': 'Liên kết đặt lại mật khẩu này đã được sử dụng. Vui lòng yêu cầu link mới.'}, 400
                 
-                # Hash the new password
+                data = request.get_json()
+                
+                # Hash new password
                 salt = bcrypt.gensalt()
-                hashed_password = bcrypt.hashpw(request_data['password'].encode('utf-8'), salt)
-                password_hash = hashed_password.decode('utf-8')
+                hashed_password = bcrypt.hashpw(data['password'].encode('utf-8'), salt)
                 
-                # Update user's password
-                result = users.update_one(
+                # Cập nhật mật khẩu và thêm token vào danh sách đã sử dụng
+                # Sử dụng $addToSet để đảm bảo không có token trùng lặp
+                users.update_one(
                     {'_id': ObjectId(user_id)},
-                    {'$set': {'password': password_hash}}
+                    {
+                        '$set': {'password': hashed_password},
+                        '$addToSet': {'passwordUsedTokens': token}
+                    }
                 )
                 
-                if result.modified_count == 0:
-                    return redirect(url_for('reset_result', status='invalid'))
-                
-                return redirect(url_for('reset_result', status='success'))
-            
+                return {'message': 'Password reset successfully'}, 200
             except jwt.ExpiredSignatureError:
-                return redirect(url_for('reset_result', status='expired'))
+                return {'message': 'Liên kết đặt lại mật khẩu đã hết hạn. Link đặt lại mật khẩu chỉ có hiệu lực trong 24 giờ.'}, 400
+            except jwt.InvalidTokenError:
+                return {'message': 'Liên kết đặt lại mật khẩu không hợp lệ'}, 400
             except Exception as e:
-                return redirect(url_for('reset_result', status='invalid'))
-
+                return {'message': f'Đã xảy ra lỗi: {str(e)}'}, 500
+                
     @auth_ns.route('/reset-result/<status>')
     class ResetResult(Resource):
         def get(self, status):
             if status == 'success':
-                return {'message': 'Password reset successfully'}, 200
-            elif status == 'expired':
-                return {'message': 'Password reset link has expired'}, 400
+                return make_response(render_template('reset_success.html'), 200)
+            elif status == 'error':
+                error_message = request.args.get('error', 'Đã xảy ra lỗi không xác định')
+                return make_response(render_template('reset_error.html', error_message=error_message), 400)
             else:
-                return {'message': 'Invalid password reset link'}, 400
+                return make_response(render_template('reset_error.html', error_message='Trạng thái không hợp lệ'), 400)
 
-    # Add namespace to the API
+    # Add namespace to API
     api.add_namespace(auth_ns) 

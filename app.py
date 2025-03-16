@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, make_response
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 from flask_mail import Mail
 from flask_restx import Api
 from flask_cors import CORS
@@ -39,35 +39,23 @@ def create_app():
     app = Flask(__name__, template_folder='templates')
     app.config.from_object(Config)
     
-    # Define allowed origins
-    allowed_origins = [
-        'https://phamthangph13.github.io',
-        'http://localhost:3000',
-        'https://localhost:3000',
-        'http://localhost:5000',
-        'https://localhost:5000',
-        'https://website-social-media-aley-back-end.onrender.com',
-        'https://*.website-social-media-aley-back-end.onrender.com'
-    ]
-    
-    # For development, check if we should use a more permissive CORS policy
-    dev_mode = os.environ.get("DEV_MODE", "False").lower() == "true"
-    if dev_mode:
-        # In development mode, allow all origins for easier testing
-        cors_origins = "*"
-        supports_credentials = False  # Wildcard origin can't use credentials
-    else:
-        # In production, use the specific allowed origins
-        cors_origins = allowed_origins
-        supports_credentials = True
-    
     # Enable CORS with specific configuration
     CORS(app, resources={r"/*": {
-        "origins": cors_origins,
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-        "supports_credentials": supports_credentials
+        "origins": "*",  # Allow all origins
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "Accept"],
+        "supports_credentials": True
     }})
+    
+    # Add explicit handling for OPTIONS requests (preflight)
+    @app.after_request
+    def after_request(response):
+        if request.method == 'OPTIONS':
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
+            response.headers.add('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
+            response.headers.add('Access-Control-Max-Age', '86400')  # 24 hours
+        return response
     
     # Initialize Flask-Mail
     app.mail = Mail(app)
@@ -104,31 +92,64 @@ def create_app():
     from Friend import register_routes as register_friend_routes
     register_friend_routes(api)
     
-    # Route cho trang xác thực email
+    # Add additional imports
+    from flask import make_response, redirect, url_for
+    
+    # Add compatibility route for frontend
+    @app.route('/api/feed/combined')
+    def redirect_feed_combined():
+        # Get all query parameters
+        args = request.args.to_dict(flat=False)
+        query_string = '&'.join([f"{k}={v[0]}" for k, v in args.items()])
+        
+        # Redirect to the correct endpoint
+        target_url = f"/api/posts/feed/combined"
+        if query_string:
+            target_url += f"?{query_string}"
+        
+        # Create response with redirect status
+        response = jsonify({"redirected": True})
+        response.status_code = 307  # Temporary redirect, preserves method
+        response.headers['Location'] = target_url
+        return response
+    
+    # Handle OPTIONS for the compatibility route
+    @app.route('/api/feed/combined', methods=['OPTIONS'])
+    def options_feed_combined():
+        resp = app.make_default_options_response()
+        resp.headers['Access-Control-Allow-Origin'] = '*'
+        resp.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
+        return resp
+    
+    # Route cho trang xác thực email trung gian
     @app.route('/verify')
     def verify_page():
         token = request.args.get('token')
         if not token:
-            return redirect('/')
+            return redirect(url_for('login_page'))
         return render_template('verify.html', token=token)
     
-    # Route cho trang đặt lại mật khẩu
+    # Route cho trang đặt lại mật khẩu trung gian
     @app.route('/reset-password')
     def reset_password_page():
         token = request.args.get('token')
         if not token:
-            return redirect('/')
+            return redirect(url_for('login_page'))
         return render_template('reset_password.html', token=token)
+    
+    # Add route for login page (just as a placeholder)
+    @app.route('/login')
+    def login_page():
+        return redirect('/')
+    
+    # Add route for contact page (just as a placeholder)
+    @app.route('/contact')
+    def contact_page():
+        return redirect('/')
     
     return app
 
 if __name__ == '__main__':
     app = create_app()
-    # Get port from environment variable for Render compatibility
-    port = int(os.environ.get("PORT", 5000))
-    
-    # Check if app is running in production mode
-    is_production = os.environ.get("PRODUCTION", "False").lower() == "true"
-    
-    # Regular run - Render will handle SSL/HTTPS in production
-    app.run(host='0.0.0.0', port=port, debug=not is_production) 
+    app.run(debug=True) 

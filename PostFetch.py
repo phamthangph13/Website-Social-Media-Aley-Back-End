@@ -1,4 +1,4 @@
-from flask import request, jsonify, make_response
+from flask import request, jsonify
 from flask_restx import Namespace, Resource, fields
 from flask_cors import CORS, cross_origin
 from bson import ObjectId
@@ -61,6 +61,9 @@ def register_routes(api):
     # Tạo namespace
     post_ns = Namespace('api/posts', description='Post operations')
     
+    # Enable CORS directly for the routes that might receive preflight requests
+    # We'll handle the OPTIONS requests explicitly for critical endpoints
+    
     # Add media endpoint with CORS support
     @post_ns.route('/media/<media_id>')
     class GetPostMedia(Resource):
@@ -72,37 +75,53 @@ def register_routes(api):
         @cross_origin()
         def get(self, media_id):
             try:
-                # Try to find the media in GridFS
+                # Tìm file trong GridFS theo ID
                 if not ObjectId.is_valid(media_id):
-                    return {'message': 'Invalid media ID format'}, 400
+                    return {
+                        'success': False,
+                        'message': 'Invalid media ID format',
+                        'error': {
+                            'code': 'INVALID_ID',
+                            'details': 'The provided ID is not a valid ObjectId'
+                        }
+                    }, 400
                 
-                # Find the file in GridFS
-                file = fs.find_one({'_id': ObjectId(media_id)})
+                media = fs.get(ObjectId(media_id))
+                if not media:
+                    return {
+                        'success': False,
+                        'message': 'Media not found',
+                        'error': {
+                            'code': 'NOT_FOUND',
+                            'details': 'No media exists with the provided ID'
+                        }
+                    }, 404
                 
-                if not file:
-                    return {'message': 'Media not found'}, 404
+                # Lấy thông tin content type từ metadata (nếu có)
+                content_type = media.metadata.get('contentType', 'image/jpeg')
                 
-                # Read file content
-                file_data = file.read()
-                
-                # Get file metadata
-                content_type = file.content_type
-                filename = file.filename
-                
-                # Create response with file data
-                response = make_response(file_data)
+                # Trả về file image với content type phù hợp
+                from flask import send_file, make_response
+                response = make_response(send_file(
+                    io.BytesIO(media.read()),
+                    mimetype=content_type
+                ))
                 response.headers['Content-Type'] = content_type
-                response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
-                
-                # Set headers for cross-origin access
+                # Add CORS headers
                 response.headers['Access-Control-Allow-Origin'] = '*'
-                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-                
+                response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept'
                 return response
                 
             except Exception as e:
-                print(f"Error retrieving media: {str(e)}")
-                return {'message': f'Error retrieving media: {str(e)}'}, 500
+                return {
+                    'success': False,
+                    'message': 'An error occurred',
+                    'error': {
+                        'code': 'SERVER_ERROR',
+                        'details': str(e)
+                    }
+                }, 500
     
     # Models
     post_model = api.model('Post', {
@@ -248,6 +267,15 @@ def register_routes(api):
                         'details': str(e)
                     }
                 }, 500
+        
+        # Handle OPTIONS requests explicitly
+        @cross_origin()
+        def options(self):
+            return {'success': True}, 200, {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept'
+            }
     
     # Create a new post endpoint
     @post_ns.route('/')
