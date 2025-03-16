@@ -559,28 +559,20 @@ def register_routes(api):
                     }
                 }, 403
             
-            # Update the request status
+            # Update the request status - This is the only step we need now
             friend_requests.update_one(
                 {'_id': ObjectId(request_id)},
                 {'$set': {'status': 'accepted', 'updated_at': datetime.now()}}
             )
             
-            # Create a new friendship
-            sender_id = friend_request['sender_id']
-            friendship_id = friends.insert_one({
-                'user_id': current_user_id,
-                'friend_id': sender_id,
-                'status': 'accepted',
-                'created_at': datetime.now()
-            }).inserted_id
-            
             # Get sender's profile
+            sender_id = friend_request['sender_id']
             sender_profile = get_user_profile(sender_id)
             
             return {
                 'success': True,
                 'data': {
-                    'friendship_id': str(friendship_id),
+                    'friendship_id': str(friend_request['_id']),  # Use request_id as friendship_id
                     'friend': sender_profile,
                     'created_at': datetime.now()
                 }

@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request, jsonify, make_response, send_file
 from flask_restx import Namespace, Resource, fields
 from flask_cors import CORS, cross_origin
 from bson import ObjectId
@@ -101,7 +101,6 @@ def register_routes(api):
                 content_type = media.metadata.get('contentType', 'image/jpeg')
                 
                 # Trả về file image với content type phù hợp
-                from flask import send_file, make_response
                 response = make_response(send_file(
                     io.BytesIO(media.read()),
                     mimetype=content_type

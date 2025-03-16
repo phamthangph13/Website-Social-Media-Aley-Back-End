@@ -1,7 +1,7 @@
 from flask import request, jsonify, Response
 from flask_restx import Namespace, Resource, fields
 from bson import ObjectId
-from pymongo import MongoClient, DESCENDING
+from pymongo import MongoClient, DESCENDING, ASCENDING
 from config import Config
 import jwt
 from functools import wraps
@@ -443,18 +443,45 @@ def register_routes(api):
                 if str(post['author_id']) != current_user_id:
                     return {'success': False, 'message': 'Bạn không có quyền xóa bài viết này'}, 403
                 
+                # Save post data before deleting for response
+                deleted_post_id = str(post['_id'])
+                
+                # Delete media files if they exist
+                if 'media' in post and post['media']:
+                    for media_item in post['media']:
+                        if 'id' in media_item:
+                            try:
+                                # Delete from GridFS
+                                media_id = media_item['id']
+                                if isinstance(media_id, str) and ObjectId.is_valid(media_id):
+                                    fs.delete(ObjectId(media_id))
+                            except Exception as media_error:
+                                # Log error but continue with post deletion
+                                print(f"Error deleting media: {str(media_error)}")
+                
                 # Delete the post
                 result = posts.delete_one({'_id': ObjectId(post_id)})
                 
                 if result.deleted_count:
-                    # TODO: Delete associated media files
-                    
-                    return {'success': True, 'message': 'Bài viết đã được xóa'}, 200
+                    return {
+                        'success': True, 
+                        'message': 'Bài viết đã được xóa thành công', 
+                        'data': {
+                            'deleted_post_id': deleted_post_id
+                        }
+                    }, 200
                 else:
                     return {'success': False, 'message': 'Không thể xóa bài viết'}, 400
                 
             except Exception as e:
-                return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+                return {
+                    'success': False, 
+                    'message': 'Đã xảy ra lỗi khi xóa bài viết', 
+                    'error': {
+                        'code': 'DELETE_ERROR',
+                        'details': str(e)
+                    }
+                }, 500
     
     # Like/unlike a post
     @post_ns.route('/<post_id>/like')
@@ -634,6 +661,177 @@ def register_routes(api):
                 
             except Exception as e:
                 return {'success': False, 'message': f'Lỗi: {str(e)}'}, 400
+    
+    # Get public and friends posts
+    @post_ns.route('/public-and-friends')
+    class PublicAndFriendsPosts(Resource):
+        @post_ns.doc(security='jwt',
+                    params={
+                        'page': 'Page number (default: 1)',
+                        'limit': 'Items per page (default: 10)', 
+                        'sort': 'Sort order (default: newest)'
+                    })
+        @token_required
+        def get(current_user_id, self):
+            try:
+                # Get query parameters
+                page = request.args.get('page', 1, type=int)
+                limit = request.args.get('limit', 10, type=int)
+                sort = request.args.get('sort', 'newest')
+                
+                # Print debug info
+                print(f"Fetching posts for user_id: {current_user_id}")
+                
+                # Validate and set limits
+                if page < 1:
+                    page = 1
+                if limit < 1 or limit > 50:
+                    limit = 10
+                
+                # Set up sorting
+                sort_field = 'created_at'  # Updated field name to match actual db schema
+                sort_order = DESCENDING
+                if sort == 'oldest':
+                    sort_order = ASCENDING
+                elif sort == 'popular':
+                    sort_field = 'likes_count'  # Updated field name to match actual db schema
+                
+                # Calculate skip amount for pagination
+                skip = (page - 1) * limit
+                
+                # Get the user's friends
+                user_friends = []
+                friend_records = list(db.friend_requests.find({
+                    '$or': [
+                        {'sender_id': current_user_id, 'status': 'accepted'},
+                        {'recipient_id': current_user_id, 'status': 'accepted'}
+                    ]
+                }))
+                
+                print(f"Found {len(friend_records)} friend records")
+                
+                for friend in friend_records:
+                    if friend.get('sender_id') == current_user_id:
+                        friend_id = friend.get('recipient_id')
+                        if isinstance(friend_id, ObjectId):
+                            user_friends.append(str(friend_id))
+                        else:
+                            user_friends.append(friend_id)
+                    else:
+                        friend_id = friend.get('sender_id')
+                        if isinstance(friend_id, ObjectId):
+                            user_friends.append(str(friend_id))
+                        else:
+                            user_friends.append(friend_id)
+                
+                print(f"User friends: {user_friends}")
+                
+                # Check if current_user_id is ObjectId or string and convert appropriately
+                current_user_obj_id = current_user_id
+                if not isinstance(current_user_id, ObjectId):
+                    if ObjectId.is_valid(current_user_id):
+                        current_user_obj_id = ObjectId(current_user_id)
+                
+                # Convert friend IDs to ObjectId if they are strings
+                user_friends_obj_ids = []
+                for friend_id in user_friends:
+                    if isinstance(friend_id, str) and ObjectId.is_valid(friend_id):
+                        user_friends_obj_ids.append(ObjectId(friend_id))
+                    else:
+                        user_friends_obj_ids.append(friend_id)
+                
+                # Build the query
+                query = {
+                    '$or': [
+                        # Public posts from everyone except current user
+                        {'$and': [
+                            {'privacy': 'public'},  # Changed from visibility to privacy
+                            {'author_id': {'$ne': current_user_obj_id}}
+                        ]},
+                        # Friend-only posts from user's friends
+                        {'$and': [
+                            {'privacy': 'friends'},  # Changed from visibility to privacy
+                            {'author_id': {'$in': user_friends_obj_ids}}
+                        ]},
+                        # User's own posts (public or friends)
+                        {'$and': [
+                            {'privacy': {'$in': ['public', 'friends']}},  # Changed from visibility to privacy
+                            {'author_id': current_user_obj_id}
+                        ]}
+                    ]
+                }
+                
+                print(f"Query: {query}")
+                
+                # Execute the query
+                total_posts = posts.count_documents(query)
+                print(f"Total posts matching query: {total_posts}")
+                
+                posts_cursor = posts.find(query).sort(sort_field, sort_order).skip(skip).limit(limit)
+                
+                # Process results
+                result = []
+                for post in posts_cursor:
+                    print(f"Processing post: {post.get('_id')}")
+                    
+                    post_data = {
+                        'id': str(post['_id']),
+                        'content': post.get('content', ''),
+                        'author_id': str(post['author_id']),
+                        'createdAt': post.get('created_at', datetime.now()).isoformat(),  # Updated field name
+                        'visibility': post.get('privacy', 'public'),  # Changed from visibility to privacy 
+                        'likeCount': post.get('likes_count', 0)  # Changed to use actual field
+                    }
+                    
+                    # Get author info
+                    author = users.find_one({'_id': post['author_id']})
+                    if author:
+                        post_data['author'] = {
+                            'id': str(author['_id']),
+                            'name': author.get('fullName', ''),  # Updated field name
+                            'username': author.get('username', ''),
+                            'avatar': author.get('avatar', '')
+                        }
+                    
+                    # Add media info
+                    if 'media' in post and post['media']:
+                        post_data['media'] = []
+                        for media_item in post['media']:
+                            if isinstance(media_item, dict) and 'id' in media_item:
+                                media_id = media_item['id']
+                                media_url = f"/api/media/{media_id}"
+                                post_data['media'].append({
+                                    'id': media_id,
+                                    'url': media_url,
+                                    'type': media_item.get('type', 'image')
+                                })
+                    
+                    result.append(post_data)
+                
+                # Return processed data
+                return {
+                    'success': True,
+                    'data': {
+                        'posts': result,
+                        'total': total_posts,
+                        'page': page,
+                        'limit': limit,
+                        'pages': (total_posts + limit - 1) // limit
+                    }
+                }, 200
+                
+            except Exception as e:
+                print(f"Error in public-and-friends API: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    'success': False,
+                    'message': 'An error occurred while fetching posts',
+                    'error': {
+                        'code': 'SERVER_ERROR',
+                        'details': str(e)
+                    }
+                }, 500
     
     # Add namespace to API
     api.add_namespace(post_ns)
